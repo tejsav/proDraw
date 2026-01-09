@@ -1,0 +1,783 @@
+import React, { useState, useRef, useEffect } from 'react';
+import { 
+  Trash2, 
+  RotateCcw, 
+  MousePointer2,
+  PenTool,
+  X
+} from 'lucide-react';
+
+// --- Constants & Config ---
+
+const CANVAS_RATIO = 1; // 210mm / 210mm = 1 (Square)
+
+// Calculated Heights
+const SOCKET_HEIGHT = 25.5;
+const PLUMBING_HEIGHT = 15;
+
+// Hardcoded Geometric Data
+// Note: Wall geometry assumes floor line at y=120mm to match perspective
+const ZONE_CONFIG = {
+  left:  { p: 200, rx: -18, ry: 45, rz: -9, sx: -3, sy: 2 },
+  right: { p: 200, rx: -18, ry: -45, rz: 9, sx: 3, sy: -2 },
+  front: { p: 0, rx: 0, ry: 0, rz: 0, sx: 0, sy: 0 },
+  floor: { p: 0, rx: 0, ry: 0, rz: 0, sx: 0, sy: 0 },
+};
+
+// --- Custom SVG Components ---
+
+const SymbolOne = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1.98 2.22" className={className} style={{ shapeRendering: 'geometricPrecision' }}>
+    <rect x="0.03" y="0.03" width="1.92" height="2.17" fill="none" stroke="black" strokeWidth="0.05" />
+    <circle cx="0.99" cy="0.53" r="0.14" fill="black" stroke="black" strokeWidth="0.05" />
+    <circle cx="1.43" cy="1.71" r="0.12" fill="black" stroke="black" strokeWidth="0.05" />
+    <circle cx="0.55" cy="1.71" r="0.12" fill="black" stroke="black" strokeWidth="0.05" />
+    <circle cx="1.43" cy="1.17" r="0.12" fill="black" />
+    <circle cx="0.55" cy="1.17" r="0.12" fill="black" />
+  </svg>
+);
+
+const SymbolTwo = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 7.73 4.41" className={className} style={{ shapeRendering: 'geometricPrecision' }}>
+    <rect x="3.87" y="0.05" width="3.81" height="4.3" fill="none" stroke="black" strokeWidth="0.11" />
+    <rect x="0.05" y="0.05" width="3.81" height="4.3" fill="none" stroke="black" strokeWidth="0.11" />
+    <circle cx="5.77" cy="1.04" r="0.28" fill="black" stroke="black" strokeWidth="0.11" />
+    <circle cx="1.96" cy="1.04" r="0.28" fill="black" stroke="black" strokeWidth="0.11" />
+    <circle cx="6.65" cy="3.39" r="0.25" fill="black" stroke="black" strokeWidth="0.11" />
+    <circle cx="2.84" cy="3.39" r="0.25" fill="black" stroke="black" strokeWidth="0.11" />
+    <circle cx="4.89" cy="3.39" r="0.25" fill="black" stroke="black" strokeWidth="0.11" />
+    <circle cx="1.08" cy="3.39" r="0.25" fill="black" stroke="black" strokeWidth="0.11" />
+    <circle cx="6.65" cy="2.31" r="0.25" fill="black" />
+    <circle cx="2.84" cy="2.31" r="0.25" fill="black" />
+    <circle cx="4.89" cy="2.31" r="0.25" fill="black" />
+    <circle cx="1.08" cy="2.31" r="0.25" fill="black" />
+  </svg>
+);
+
+const SymbolThree = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 17.27 6.59" className={className} style={{ shapeRendering: 'geometricPrecision' }}>
+    <rect x="11.49" y="0.08" width="5.7" height="6.43" fill="none" stroke="black" strokeWidth="0.16" />
+    <rect x="5.78" y="0.08" width="5.7" height="6.43" fill="none" stroke="black" strokeWidth="0.16" />
+    <rect x="0.08" y="0.08" width="5.7" height="6.43" fill="none" stroke="black" strokeWidth="0.16" />
+    <circle cx="14.34" cy="1.56" r="0.41" fill="black" stroke="black" strokeWidth="0.16" />
+    <circle cx="8.64" cy="1.56" r="0.41" fill="black" stroke="black" strokeWidth="0.16" />
+    <circle cx="2.93" cy="1.56" r="0.41" fill="black" stroke="black" strokeWidth="0.16" />
+    <circle cx="15.66" cy="5.07" r="0.37" fill="black" stroke="black" strokeWidth="0.16" />
+    <circle cx="9.95" cy="5.07" r="0.37" fill="black" stroke="black" strokeWidth="0.16" />
+    <circle cx="4.25" cy="5.07" r="0.37" fill="black" stroke="black" strokeWidth="0.16" />
+    <circle cx="13.02" cy="5.07" r="0.37" fill="black" stroke="black" strokeWidth="0.16" />
+    <circle cx="7.32" cy="5.07" r="0.37" fill="black" stroke="black" strokeWidth="0.16" />
+    <circle cx="1.62" cy="5.07" r="0.37" fill="black" stroke="black" strokeWidth="0.16" />
+    <circle cx="15.66" cy="3.46" r="0.37" fill="black" />
+    <circle cx="9.95" cy="3.46" r="0.37" fill="black" />
+    <circle cx="4.25" cy="3.46" r="0.37" fill="black" />
+    <circle cx="13.02" cy="3.46" r="0.37" fill="black" />
+    <circle cx="7.32" cy="3.46" r="0.37" fill="black" />
+    <circle cx="1.62" cy="3.46" r="0.37" fill="black" />
+  </svg>
+);
+
+const SymbolFour = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3.12 1.08" className={className} style={{ shapeRendering: 'geometricPrecision' }}>
+    <circle cx="2.58" cy="0.54" r="0.54" fill="black" />
+    <circle cx="0.54" cy="0.54" r="0.54" fill="black" />
+  </svg>
+);
+
+const SymbolFive = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3.41 1.45" className={className} style={{ shapeRendering: 'geometricPrecision' }}>
+    <ellipse cx="1.7" cy="0.72" rx="1.67" ry="0.69" fill="none" stroke="black" strokeWidth="0.07" />
+    <ellipse cx="1.7" cy="0.72" rx="1.49" ry="0.56" fill="black" stroke="black" strokeWidth="0.07" />
+  </svg>
+);
+
+const SYMBOL_TYPES = [
+  { id: 'sym1', icon: SymbolOne, label: 'Socket', aspectRatio: 1.98 / 2.22, baseHeight: SOCKET_HEIGHT },
+  { id: 'sym2', icon: SymbolTwo, label: '2-Sockets', aspectRatio: 7.73 / 4.41, baseHeight: SOCKET_HEIGHT },
+  { id: 'sym3', icon: SymbolThree, label: '3-Sockets', aspectRatio: 17.27 / 6.59, baseHeight: SOCKET_HEIGHT },
+  { id: 'sym4', icon: SymbolFour, label: 'Water Inlet', aspectRatio: 3.12 / 1.08, baseHeight: PLUMBING_HEIGHT },
+  { id: 'sym5', icon: SymbolFive, label: 'Drain', aspectRatio: 3.41 / 1.45, baseHeight: PLUMBING_HEIGHT },
+];
+
+// --- Helper Functions ---
+
+const generateTransformString = (config) => {
+  const p = config.p > 0 ? `perspective(${config.p}px)` : '';
+  return `${p} rotateX(${config.rx}deg) rotateY(${config.ry}deg) rotateZ(${config.rz}deg) skewX(${config.sx}deg) skewY(${config.sy}deg)`;
+};
+
+const getZone = (x, y) => {
+  if (x < 45) {
+    const boundaryY = -1.555 * x + 210;
+    return y < boundaryY ? 'left' : 'floor';
+  }
+  if (x > 165) {
+    const boundaryY = 1.555 * (x - 165) + 140;
+    return y < boundaryY ? 'right' : 'floor';
+  }
+  if (y < 140) return 'front';
+  return 'floor';
+};
+
+const calculateLength = (x1, y1, x2, y2, scale) => {
+  const distPx = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+  return Math.round(distPx * scale);
+};
+
+// Distance from point (px,py) to line segment (x1,y1)-(x2,y2)
+const distToSegment = (px, py, x1, y1, x2, y2) => {
+  const l2 = (x1 - x2) ** 2 + (y1 - y2) ** 2;
+  if (l2 === 0) return Math.hypot(px - x1, py - y1);
+  let t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2;
+  t = Math.max(0, Math.min(1, t));
+  const projX = x1 + t * (x2 - x1);
+  const projY = y1 + t * (y2 - y1);
+  return { dist: Math.hypot(px - projX, py - projY), x: projX, y: projY };
+};
+
+// Intersection of horizontal line y=H with segment (x1,y1)-(x2,y2)
+const intersectHorz = (H, x1, y1, x2, y2) => {
+  const min = Math.min(y1, y2) - 0.1;
+  const max = Math.max(y1, y2) + 0.1;
+  if (H >= min && H <= max) {
+    if (y2 === y1) return null; 
+    const t = (H - y1) / (y2 - y1);
+    const x = x1 + t * (x2 - x1);
+    return { x, y: H };
+  }
+  return null;
+};
+
+// Intersection of vertical line x=V with segment (x1,y1)-(x2,y2)
+const intersectVert = (V, x1, y1, x2, y2) => {
+  const min = Math.min(x1, x2) - 0.1;
+  const max = Math.max(x1, x2) + 0.1;
+  if (V >= min && V <= max) {
+    if (x2 === x1) return null;
+    const t = (V - x1) / (x2 - x1);
+    const y = y1 + t * (y2 - y1);
+    return { x: V, y };
+  }
+  return null;
+};
+
+// --- Components ---
+
+const DraggableSidebarItem = ({ type }) => {
+  const handleDragStart = (e) => {
+    e.dataTransfer.setData('application/react-symbol-id', type.id);
+    e.dataTransfer.effectAllowed = 'copy';
+  };
+
+  return (
+    <div
+      draggable
+      onDragStart={handleDragStart}
+      className="flex flex-col items-center justify-center p-2 bg-white rounded-lg shadow-sm border border-slate-200 cursor-grab hover:bg-blue-50 hover:border-blue-300 transition-colors active:cursor-grabbing h-20"
+    >
+      <div className="flex-1 flex items-center justify-center w-full">
+        <type.icon className="max-h-8 w-full text-slate-800" />
+      </div>
+      <span className="text-[10px] font-medium text-slate-500 mt-1">{type.label}</span>
+    </div>
+  );
+};
+
+const CanvasItem = ({ item, isSelected, onMouseDown }) => {
+  const symbolDef = SYMBOL_TYPES.find(t => t.id === item.type);
+  const SymbolIcon = symbolDef?.icon || SymbolOne;
+
+  const config = ZONE_CONFIG[item.zone];
+  const warpStyle = generateTransformString(config);
+
+  return (
+    <div
+      onMouseDown={(e) => onMouseDown(e, item.id)}
+      className={`absolute cursor-move flex items-center justify-center group`}
+      style={{
+        left: item.x,
+        top: item.y,
+        width: item.width,
+        height: item.height,
+        transform: `translate(-50%, -50%) ${warpStyle}`, 
+        transformOrigin: 'center bottom',
+      }}
+    >
+      <div 
+        className={`absolute inset-[-4px] border-2 rounded transition-opacity pointer-events-none
+          ${isSelected ? 'border-blue-500 opacity-100' : 'border-transparent opacity-0 group-hover:border-slate-300 group-hover:opacity-100'}`} 
+      />
+      <SymbolIcon className="w-full h-full text-slate-900" />
+    </div>
+  );
+};
+
+// Measurement Line Component with Arrows and Extension Lines
+const MeasurementLine = ({ line, isSelected, scale, onSelect }) => {
+  const length = calculateLength(line.x1, line.y1, line.x2, line.y2, scale);
+  const cx = (line.x1 + line.x2) / 2;
+  const cy = (line.y1 + line.y2) / 2;
+  
+  const dx = line.x2 - line.x1;
+  const dy = line.y2 - line.y1;
+  
+  // Strictly Orthogonal Logic:
+  // If closer to horizontal (wider than tall), extensions are VERTICAL.
+  // If closer to vertical (taller than wide), extensions are HORIZONTAL.
+  const isMoreHorizontal = Math.abs(dx) >= Math.abs(dy);
+  
+  // 5mm extension line in pixels
+  const extLen = 5 / scale;
+  
+  // Offsets from endpoint. 
+  // If horizontal: px=0, py=extLen/2 (vertical ticks)
+  // If vertical: px=extLen/2, py=0 (horizontal ticks)
+  const px = isMoreHorizontal ? 0 : extLen / 2;
+  const py = isMoreHorizontal ? extLen / 2 : 0;
+
+  // Colors based on selection
+  const strokeColor = isSelected ? "#22c55e" : "#3b82f6"; 
+
+  const markerIdEnd = isSelected ? "arrowhead-sel" : "arrowhead-unsel";
+  const markerIdStart = isSelected ? "arrowhead-start-sel" : "arrowhead-start-unsel";
+
+  return (
+    <g 
+      onClick={(e) => { e.stopPropagation(); onSelect(); }} 
+      className="cursor-pointer"
+    >
+      <defs>
+        <marker id="arrowhead-unsel" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#3b82f6" />
+        </marker>
+        <marker id="arrowhead-start-unsel" markerWidth="10" markerHeight="7" refX="1" refY="3.5" orient="auto">
+          <polygon points="10 0, 0 3.5, 10 7" fill="#3b82f6" />
+        </marker>
+
+        <marker id="arrowhead-sel" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#22c55e" />
+        </marker>
+        <marker id="arrowhead-start-sel" markerWidth="10" markerHeight="7" refX="1" refY="3.5" orient="auto">
+          <polygon points="10 0, 0 3.5, 10 7" fill="#22c55e" />
+        </marker>
+      </defs>
+
+      {/* Hit Area (Thick invisible line for easier selection) - MUST HAVE pointerEvents="auto" */}
+      <line 
+        x1={line.x1} y1={line.y1} 
+        x2={line.x2} y2={line.y2} 
+        stroke="transparent" 
+        strokeWidth="15" 
+        pointerEvents="auto"
+      />
+
+      {/* Extension Lines (Orthogonal) */}
+      <line 
+        x1={line.x1 - px} y1={line.y1 - py} 
+        x2={line.x1 + px} y2={line.y1 + py} 
+        stroke={strokeColor} 
+        strokeWidth="1" 
+        pointerEvents="none"
+      />
+      <line 
+        x1={line.x2 - px} y1={line.y2 - py} 
+        x2={line.x2 + px} y2={line.y2 + py} 
+        stroke={strokeColor} 
+        strokeWidth="1" 
+        pointerEvents="none"
+      />
+
+      {/* Main Line */}
+      <line 
+        x1={line.x1} 
+        y1={line.y1} 
+        x2={line.x2} 
+        y2={line.y2} 
+        stroke={strokeColor} 
+        strokeWidth="1.5"
+        markerEnd={`url(#${markerIdEnd})`}
+        markerStart={`url(#${markerIdStart})`}
+        pointerEvents="none"
+      />
+      
+      {/* Distance Text */}
+      <foreignObject x={cx - 40} y={cy - 20} width="80" height="40" style={{ pointerEvents: 'none' }}>
+        <div className="flex items-center justify-center w-full h-full">
+          <span className={`bg-slate-100/90 px-1 text-2xl font-bold font-mono rounded border shadow-sm ${isSelected ? 'text-green-600 border-green-200' : 'text-blue-600 border-blue-200'}`}>
+            {length}
+          </span>
+        </div>
+      </foreignObject>
+    </g>
+  );
+};
+
+// --- Main Application ---
+
+export default function App() {
+  const [elements, setElements] = useState([]);
+  const [measurements, setMeasurements] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
+  const [isDrawingMode, setIsDrawingMode] = useState(false);
+  
+  const [interaction, setInteraction] = useState({ 
+    type: 'idle', 
+    activeId: null, 
+    handleType: null,
+    startX: 0,
+    startY: 0,
+    initialData: null 
+  });
+
+  const canvasRef = useRef(null);
+
+  // --- Snapping Logic ---
+  const getSnapPosition = (rawX, rawY, anchorX = null, anchorY = null, canvasRect) => {
+    const width = canvasRect.width;
+    const height = canvasRect.height;
+    const toPxX = (v) => (v / 210) * width;
+    const toPxY = (v) => (v / 210) * height;
+
+    const SNAP_THRESH = 20; // Increased threshold
+    let snapX = rawX;
+    let snapY = rawY;
+    let snapped = false;
+
+    // --- A. Snap to Symbol Centers & Offsets ---
+    for (const el of elements) {
+      const offsets = [
+        { x: 0, y: 0 },
+        { x: 0, y: -el.width / 2 },
+        { x: 0, y: el.width / 2 },
+        { x: -el.width / 2, y: 0 },
+        { x: el.width / 2, y: 0 }
+      ];
+
+      for (const off of offsets) {
+        const tx = el.x + off.x;
+        const ty = el.y + off.y;
+        if (Math.hypot(rawX - tx, rawY - ty) < SNAP_THRESH) {
+          return { x: tx, y: ty, snapped: true };
+        }
+      }
+    }
+
+    // --- B. Straight Line Alignment (Horizontal/Vertical) ---
+    let isVert = false;
+    let isHorz = false;
+
+    if (anchorX !== null && anchorY !== null) {
+      if (Math.abs(rawX - anchorX) < SNAP_THRESH) {
+        snapX = anchorX;
+        isVert = true;
+        snapped = true;
+      }
+      if (Math.abs(rawY - anchorY) < SNAP_THRESH) {
+        snapY = anchorY;
+        isHorz = true;
+        snapped = true;
+      }
+    }
+
+    // --- C. Wall Edge Snapping (With Intersection Support) ---
+    // UPDATED WALLS: Matches Visual 120 geometry
+    const walls = [
+      { x1: 0, y1: toPxY(210), x2: toPxX(45), y2: toPxY(120) }, // Left Diagonal
+      { x1: toPxX(165), y1: toPxY(120), x2: toPxX(210), y2: toPxY(210) }, // Right Diagonal
+      { x1: toPxX(45), y1: 0, x2: toPxX(45), y2: toPxY(120) }, // Back Left V
+      { x1: toPxX(165), y1: 0, x2: toPxX(165), y2: toPxY(120) }, // Back Right V
+      { x1: toPxX(45), y1: toPxY(120), x2: toPxX(165), y2: toPxY(120) } // Back Bottom H
+    ];
+
+    let minDist = Infinity;
+    let closestPt = null;
+
+    // 1. If aligned, check for intersection with walls first (Anti-Overshoot)
+    if (isVert || isHorz) {
+      for (const wall of walls) {
+        let intersection = null;
+        if (isVert) intersection = intersectVert(snapX, wall.x1, wall.y1, wall.x2, wall.y2);
+        else if (isHorz) intersection = intersectHorz(snapY, wall.x1, wall.y1, wall.x2, wall.y2);
+
+        if (intersection) {
+          const dist = Math.hypot(rawX - intersection.x, rawY - intersection.y);
+          if (dist < SNAP_THRESH * 3 && dist < minDist) { 
+             minDist = dist;
+             closestPt = intersection;
+          }
+        }
+      }
+    }
+
+    // 2. If no intersection found (or not aligned), check standard nearest point
+    if (!closestPt && !snapped) {
+      for (const wall of walls) {
+        const res = distToSegment(rawX, rawY, wall.x1, wall.y1, wall.x2, wall.y2);
+        if (res.dist < SNAP_THRESH && res.dist < minDist) {
+           minDist = res.dist;
+           closestPt = { x: res.x, y: res.y };
+        }
+      }
+    }
+
+    if (closestPt) {
+      snapX = closestPt.x;
+      snapY = closestPt.y;
+      snapped = true;
+    }
+
+    return { x: snapX, y: snapY, snapped };
+  };
+
+  // --- Handlers ---
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    if (isDrawingMode) return;
+
+    const typeId = e.dataTransfer.getData('application/react-symbol-id');
+    if (!typeId || !canvasRef.current) return;
+
+    const symbolDef = SYMBOL_TYPES.find(t => t.id === typeId);
+    if (!symbolDef) return;
+
+    const rect = canvasRef.current.getBoundingClientRect();
+    const scale = 210 / rect.width; 
+    
+    const pixelX = e.clientX - rect.left;
+    const pixelY = e.clientY - rect.top;
+    
+    const mmX = pixelX * scale;
+    const mmY = pixelY * scale;
+    const zone = getZone(mmX, mmY);
+
+    const height = symbolDef.baseHeight;
+    const width = height * symbolDef.aspectRatio;
+
+    const newElement = {
+      id: crypto.randomUUID(),
+      type: typeId,
+      x: pixelX,
+      y: pixelY,
+      width,
+      height,
+      zone, 
+      rotation: 0,
+    };
+
+    setElements(prev => [...prev, newElement]);
+    setSelectedId(newElement.id);
+  };
+
+  const handleMouseDown = (e) => {
+    if (!canvasRef.current) return;
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    const startSnap = getSnapPosition(x, y, null, null, rect);
+
+    if (isDrawingMode) {
+      const newLineId = crypto.randomUUID();
+      const newLine = { 
+        id: newLineId, 
+        x1: startSnap.x, 
+        y1: startSnap.y, 
+        x2: startSnap.x, 
+        y2: startSnap.y 
+      };
+      setMeasurements(prev => [...prev, newLine]);
+      setSelectedId(newLineId);
+      setInteraction({
+        type: 'drawing_line',
+        activeId: newLineId,
+        startX: startSnap.x,
+        startY: startSnap.y,
+        initialData: newLine
+      });
+      return;
+    }
+
+    setSelectedId(null);
+  };
+
+  const handleSymbolMouseDown = (e, id) => {
+    if (isDrawingMode) return;
+    e.stopPropagation();
+    const item = elements.find(el => el.id === id);
+    if (!item) return;
+
+    setSelectedId(id);
+    setInteraction({
+      type: 'dragging_symbol',
+      activeId: id,
+      startX: e.clientX,
+      startY: e.clientY,
+      initialData: { x: item.x, y: item.y }
+    });
+  };
+
+  const handleHandleMouseDown = (e, lineId, handleType) => {
+    if (isDrawingMode) return;
+    e.stopPropagation();
+    const line = measurements.find(m => m.id === lineId);
+    if (!line) return;
+
+    setSelectedId(lineId);
+    setInteraction({
+      type: 'moving_handle',
+      activeId: lineId,
+      handleType: handleType,
+      startX: e.clientX, 
+      startY: e.clientY,
+      initialData: { ...line } 
+    });
+  };
+
+  const handleMouseMove = (e) => {
+    if (interaction.type === 'idle' || !canvasRef.current) return;
+
+    const rect = canvasRef.current.getBoundingClientRect();
+    const scale = 210 / rect.width;
+    const dx = e.clientX - interaction.startX;
+    const dy = e.clientY - interaction.startY;
+    const canvasX = e.clientX - rect.left;
+    const canvasY = e.clientY - rect.top;
+
+    if (interaction.type === 'dragging_symbol') {
+      const { initialData, activeId } = interaction;
+      const newX = initialData.x + dx;
+      const newY = initialData.y + dy;
+      const mmX = newX * scale;
+      const mmY = newY * scale;
+      const newZone = getZone(mmX, mmY);
+
+      setElements(prev => prev.map(el => 
+        el.id === activeId ? { ...el, x: newX, y: newY, zone: newZone } : el
+      ));
+    }
+    
+    else if (interaction.type === 'drawing_line') {
+      const startX = interaction.initialData.x1;
+      const startY = interaction.initialData.y1;
+      const snap = getSnapPosition(canvasX, canvasY, startX, startY, rect);
+
+      setMeasurements(prev => prev.map(m => 
+        m.id === interaction.activeId ? { ...m, x2: snap.x, y2: snap.y } : m
+      ));
+    }
+
+    else if (interaction.type === 'moving_handle') {
+      const { initialData, activeId, handleType } = interaction;
+      const anchorX = handleType === 'start' ? initialData.x2 : initialData.x1;
+      const anchorY = handleType === 'start' ? initialData.y2 : initialData.y1;
+      
+      const snap = getSnapPosition(canvasX, canvasY, anchorX, anchorY, rect);
+      
+      setMeasurements(prev => prev.map(m => {
+        if (m.id !== activeId) return m;
+        if (handleType === 'start') {
+          return { ...m, x1: snap.x, y1: snap.y };
+        } else {
+          return { ...m, x2: snap.x, y2: snap.y };
+        }
+      }));
+    }
+  };
+
+  const handleMouseUp = () => {
+    if (interaction.type === 'drawing_line') {
+      setIsDrawingMode(false); 
+    }
+    setInteraction({ type: 'idle', activeId: null, handleType: null, startX: 0, startY: 0, initialData: null });
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) {
+        setElements(prev => prev.filter(el => el.id !== selectedId));
+        setMeasurements(prev => prev.filter(m => m.id !== selectedId));
+        setSelectedId(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedId]);
+
+  const clearCanvas = () => {
+    if (confirm('Are you sure you want to clear the canvas?')) {
+      setElements([]);
+      setMeasurements([]);
+      setSelectedId(null);
+    }
+  };
+
+  const currentScale = getScale();
+  function getScale() {
+    if (!canvasRef.current) return 1;
+    // Scale = mm / pixel
+    return 210 / canvasRef.current.getBoundingClientRect().width;
+  }
+
+  return (
+    <div 
+      className="flex h-screen w-full bg-slate-100 overflow-hidden font-sans text-slate-900"
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+    >
+      <aside className="w-64 bg-white border-r border-slate-200 flex flex-col shadow-lg z-10 shrink-0">
+        <div className="p-4 border-b border-slate-100">
+          <h1 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+            <MousePointer2 className="w-4 h-4 text-blue-600" />
+            Symbol Studio
+          </h1>
+          <div className="mt-2 inline-block px-2 py-1 rounded bg-slate-100 text-[10px] text-slate-500 font-medium">
+            210mm x 210mm Canvas
+          </div>
+        </div>
+
+        {/* Tools Section (Moved to Top) */}
+        <div className="p-3 border-b border-slate-100 bg-slate-50/50">
+          <div className="text-[10px] text-slate-400 font-medium uppercase tracking-wider mb-2">Tools</div>
+          <button 
+            onClick={() => setIsDrawingMode(!isDrawingMode)}
+            className={`w-full flex items-center justify-center gap-2 p-2 rounded border text-xs font-medium transition-colors ${
+              isDrawingMode 
+                ? 'bg-blue-600 text-white border-blue-700' 
+                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            <PenTool size={14} />
+            {isDrawingMode ? 'Drawing Ruler...' : 'Draw Ruler'}
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-3">
+          <div className="grid grid-cols-2 gap-2">
+            {SYMBOL_TYPES.map(type => (
+              <DraggableSidebarItem key={type.id} type={type} />
+            ))}
+          </div>
+        </div>
+
+        <div className="p-3 border-t border-slate-100 bg-slate-50">
+          <div className="space-y-2">
+            <div className="text-[10px] text-slate-400 font-medium uppercase tracking-wider mb-2">Actions</div>
+            
+            <button 
+              onClick={() => {
+                if (selectedId) {
+                   setElements(prev => prev.filter(el => el.id !== selectedId));
+                   setMeasurements(prev => prev.filter(m => m.id !== selectedId));
+                   setSelectedId(null);
+                }
+              }}
+              disabled={!selectedId}
+              className="w-full flex items-center justify-center gap-2 p-2 rounded bg-white border border-slate-200 text-xs font-medium text-slate-700 hover:bg-red-50 hover:text-red-600 hover:border-red-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <Trash2 size={14} />
+              Delete Selected
+            </button>
+            <button 
+              onClick={clearCanvas}
+              className="w-full flex items-center justify-center gap-2 p-2 rounded bg-white border border-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-100 transition-colors"
+            >
+              <RotateCcw size={14} />
+              Clear Canvas
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      <main className="flex-1 bg-slate-100 relative flex items-center justify-center p-1 overflow-hidden">
+        <div 
+          ref={canvasRef}
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+          onMouseDown={handleMouseDown}
+          className={`relative bg-white shadow-2xl transition-all ${isDrawingMode ? 'cursor-crosshair' : 'cursor-default'}`}
+          style={{
+            aspectRatio: `${CANVAS_RATIO}`,
+            maxWidth: '100%',
+            maxHeight: '100%',
+            minWidth: '0',
+            minHeight: '0',
+            width: '100%',
+            height: '100%'
+          }}
+        >
+          <svg 
+            viewBox="0 0 210 210" 
+            className="absolute inset-0 w-full h-full pointer-events-none z-0"
+            style={{ shapeRendering: 'geometricPrecision' }}
+          >
+            <rect x="45" y="0" width="120" height="120" fill="none" />
+            <polygon points="0,0 45,0 45,120 0,210" fill="none" />
+            <polygon points="165,0 210,0 210,210 165,120" fill="none" />
+            <polygon points="45,120 165,120 210,210 0,210" fill="none" />
+
+            <pattern id="grid" x="0" y="0" width="10" height="10" patternUnits="userSpaceOnUse">
+              <circle cx="1" cy="1" r="0.5" fill="#cbd5e1" />
+            </pattern>
+            <rect width="210" height="210" fill="url(#grid)" opacity="0.5" />
+
+            <g stroke="black" strokeWidth="0.5" fill="none">
+              <rect x="45" y="0" width="120" height="120" />
+              <line x1="45" y1="120" x2="0" y2="210" />
+              <line x1="165" y1="120" x2="210" y2="210" />
+            </g>
+          </svg>
+
+          <svg className="absolute inset-0 w-full h-full pointer-events-none z-0">
+             {measurements.map(m => (
+               <MeasurementLine 
+                 key={m.id} 
+                 line={m} 
+                 isSelected={selectedId === m.id} 
+                 onSelect={() => setSelectedId(m.id)}
+                 scale={currentScale}
+               />
+             ))}
+          </svg>
+
+          {measurements.map(m => {
+             const isSelected = selectedId === m.id;
+             // ONLY render handles if selected
+             if (!isSelected) return null;
+             
+             return (
+               <React.Fragment key={m.id}>
+                 <div 
+                    onMouseDown={(e) => handleHandleMouseDown(e, m.id, 'start')}
+                    className={`absolute w-3 h-3 rounded-full -ml-1.5 -mt-1.5 cursor-pointer z-20 hover:scale-125 transition-transform bg-green-500`}
+                    style={{ left: m.x1, top: m.y1 }}
+                 />
+                 <div 
+                    onMouseDown={(e) => handleHandleMouseDown(e, m.id, 'end')}
+                    className={`absolute w-3 h-3 rounded-full -ml-1.5 -mt-1.5 cursor-pointer z-20 hover:scale-125 transition-transform bg-green-500`}
+                    style={{ left: m.x2, top: m.y2 }}
+                 />
+               </React.Fragment>
+             );
+          })}
+
+          {elements.map(el => (
+            <CanvasItem
+              key={el.id}
+              item={el}
+              isSelected={selectedId === el.id}
+              onMouseDown={handleSymbolMouseDown}
+            />
+          ))}
+
+        </div>
+      </main>
+    </div>
+  );
+}
